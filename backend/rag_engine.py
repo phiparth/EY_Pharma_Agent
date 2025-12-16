@@ -16,8 +16,9 @@ class RAGSystem:
             return
         
         try:
+            # FIX: Use the newer stable embedding model
             self.embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001",
+                model="models/text-embedding-004",
                 google_api_key=api_key
             )
         except Exception as e:
@@ -25,21 +26,16 @@ class RAGSystem:
 
     def load_directory(self, directory_path: str = "data"):
         """Automatically scans and ingests all PDFs in the data folder."""
-        # Safety check: if embeddings weren't set up, we can't load.
         if not self.embeddings:
             print("RAG Setup skipped: No embeddings initialized.")
             return 
 
-        # Create data directory if it doesn't exist
         if not os.path.exists(directory_path):
             os.makedirs(directory_path)
-            print(f"Created directory: {directory_path}")
             return 
 
-        # Find all PDF files
         pdf_files = glob.glob(os.path.join(directory_path, "*.pdf"))
         if not pdf_files:
-            print("No PDFs found in data directory.")
             return
 
         all_pages = []
