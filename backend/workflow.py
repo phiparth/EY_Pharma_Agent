@@ -1,8 +1,9 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from .master_agent import generate_master_plan, get_fallback_llm
+from .master_agent import generate_master_plan
 from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 import json
 
@@ -30,26 +31,30 @@ def execute_step(state: GraphState):
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
-            # Inject context
-            context = {}
-            if agent_name == "ClinicalTrialsAgent":
-                context = {"molecule": plan["molecule"], "indication": plan["indication"]}
-            elif agent_name in ["PatentLandscapeAgent", "EXIMTrendsAgent"]:
-                context = {"molecule": plan["molecule"]}
-            elif agent_name == "IQVIAInsightsAgent":
-                context = {"therapeutic_area": plan["therapeutic_area"]}
-            
-            # Combine instruction with context if needed, or pass as dict
-            # For simplicity in this robust version, we try passing dict if tool supports it, else string
+            # Simple direct invocation for robustness
             try:
-                if context:
-                    # Merge instruction into context
-                    context["instruction"] = instruction
-                    output = AGENT_MAP[agent_name].invoke(context)
+                # If tool expects specific args, we try to pass them, otherwise standard instruction
+                if agent_name == "ClinicalTrialsAgent":
+                    output = AGENT_MAP[agent_name].invoke({
+                        "instruction": instruction,
+                        "molecule": plan["molecule"], 
+                        "indication": plan["indication"]
+                    })
+                elif agent_name in ["PatentLandscapeAgent", "EXIMTrendsAgent"]:
+                    output = AGENT_MAP[agent_name].invoke({
+                        "instruction": instruction,
+                        "molecule": plan["molecule"]
+                    })
+                elif agent_name == "IQVIAInsightsAgent":
+                    output = AGENT_MAP[agent_name].invoke({
+                        "instruction": instruction,
+                        "therapeutic_area": plan["therapeutic_area"]
+                    })
                 else:
                     output = AGENT_MAP[agent_name].invoke(instruction)
-            except Exception as e:
-                output = f"Tool Error: {str(e)}"
+            except:
+                # Fallback to simple instruction passing if structured args fail
+                output = AGENT_MAP[agent_name].invoke(instruction)
         else:
             output = "Error: Agent not found."
             
@@ -60,8 +65,11 @@ def execute_step(state: GraphState):
 def synthesize_step(state: GraphState):
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    # Use the same fallback logic
-    llm = get_fallback_llm(state["api_key"])
+    # Use standard Flash model
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash", 
+        google_api_key=state["api_key"]
+    )
     
     summary_prompt = f"""
     You are a Pharmaceutical Strategy Consultant.
