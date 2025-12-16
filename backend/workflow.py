@@ -5,6 +5,7 @@ from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
+import json
 
 class GraphState(TypedDict):
     user_query: str
@@ -33,7 +34,6 @@ def execute_step(state: GraphState):
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
-            # Pass specific context args if needed by the tool signature
             if agent_name == "ClinicalTrialsAgent":
                 output = AGENT_MAP[agent_name].invoke({
                     "instruction": instruction,
@@ -56,7 +56,6 @@ def execute_step(state: GraphState):
                     "molecule": plan["molecule"]
                 })
             else:
-                # Web Intelligence
                 output = AGENT_MAP[agent_name].invoke(instruction)
         else:
             output = "Error: Agent not found."
@@ -69,7 +68,11 @@ def synthesize_step(state: GraphState):
     """Step 3: Synthesize Final Report"""
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=state["api_key"])
+    # FIX: Use the specific versioned model name
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-1.5-flash-001", 
+        google_api_key=state["api_key"]
+    )
     
     summary_prompt = f"""
     You are a Pharmaceutical Strategy Consultant.
