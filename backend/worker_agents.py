@@ -1,11 +1,19 @@
 import json
 import requests
 import random
-from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 
-# Initialize Base Search
-ddg_search = DuckDuckGoSearchRun()
+# --- ROBUST INITIALIZATION ---
+# We wrap the search tool import in a try-except block.
+# If the library is missing, the app will not crash; it will simply fallback.
+try:
+    from langchain_community.tools import DuckDuckGoSearchRun
+    ddg_search = DuckDuckGoSearchRun()
+    SEARCH_AVAILABLE = True
+except ImportError:
+    print("WARNING: duckduckgo-search not found. Search tools will return mock data.")
+    ddg_search = None
+    SEARCH_AVAILABLE = False
 
 # --- 1. Clinical Trials Agent (REAL API) ---
 @tool
@@ -13,8 +21,7 @@ def clinical_trials_agent(instruction: str, molecule: str, indication: str):
     """
     Queries ClinicalTrials.gov API v2 for real-time study data.
     """
-    print(f"DEBUG: Querying ClinicalTrials.gov for {molecule} + {indication}")
-    
+    # For robustness, handle cases where API might be down
     base_url = "https://clinicaltrials.gov/api/v2/studies"
     params = {
         "query.term": f"{molecule} {indication}",
@@ -31,7 +38,6 @@ def clinical_trials_agent(instruction: str, molecule: str, indication: str):
             if not studies:
                 return "No active clinical trials found for this specific combination."
             
-            # Format results
             formatted_results = []
             for study in studies:
                 protocol = study.get("protocolSection", {})
@@ -44,11 +50,9 @@ def clinical_trials_agent(instruction: str, molecule: str, indication: str):
                 formatted_results.append(
                     f"- [{nct_id}] {title}\n  Phase: {', '.join(phases)} | Status: {status} | Sponsor: {sponsor}"
                 )
-            
             return "\n".join(formatted_results)
         else:
             return f"Error fetching trials: API returned {response.status_code}"
-            
     except Exception as e:
         return f"Connection failed to ClinicalTrials.gov: {str(e)}"
 
@@ -57,9 +61,11 @@ def clinical_trials_agent(instruction: str, molecule: str, indication: str):
 def patent_landscape_agent(instruction: str, molecule: str):
     """
     Searches specialized patent repositories (Google Patents, USPTO) via targeted web queries.
-    Replaces broken Lens.org API with functional search.
     """
-    # We construct a query that forces the search engine to look at patent sites
+    if not SEARCH_AVAILABLE or not ddg_search:
+        return "Search tool unavailable. Please install 'duckduckgo-search'."
+
+    # Targeted query for robustness
     search_query = f"site:patents.google.com OR site:uspto.gov {molecule} patent expiry formulation"
     
     try:
@@ -74,7 +80,6 @@ def iqvia_insights_agent(instruction: str, therapeutic_area: str):
     """
     Simulates detailed commercial data based on therapeutic area knowledge base.
     """
-    # A robust dictionary to simulate "Real" database lookups
     market_db = {
         "Oncology": {"size": "180B", "cagr": "12%", "top_competitor": "Keytruda", "trend": "High growth in immunotherapies"},
         "Diabetes": {"size": "60B", "cagr": "4%", "top_competitor": "Ozempic", "trend": "Shift to GLP-1 agonists"},
@@ -82,7 +87,6 @@ def iqvia_insights_agent(instruction: str, therapeutic_area: str):
         "Rare Disease": {"size": "20B", "cagr": "15%", "top_competitor": "Various Orphan Drugs", "trend": "High value, low volume"}
     }
     
-    # Default fallback logic for unknown areas
     data = market_db.get(therapeutic_area, {
         "size": f"{random.randint(10, 100)}B", 
         "cagr": f"{random.uniform(2, 10):.1f}%",
@@ -122,7 +126,13 @@ def web_intelligence_agent(instruction: str):
     """
     General scientific web search.
     """
-    return ddg_search.run(instruction)
+    if not SEARCH_AVAILABLE or not ddg_search:
+        return "Web search unavailable (Dependency missing)."
+        
+    try:
+        return ddg_search.run(instruction)
+    except Exception as e:
+        return f"Web search failed: {str(e)}"
 
 # Map string names to functions for the orchestrator
 AGENT_MAP = {
