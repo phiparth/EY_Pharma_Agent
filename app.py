@@ -9,23 +9,32 @@ st.title("🧬 Pharma Agentic AI: Innovation Engine")
 
 # --- 1. Load Secrets & Setup RAG ---
 try:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-    os.environ["GOOGLE_API_KEY"] = api_key # Set env var for generic tools if needed
-    
-    # Initialize RAG silently on startup
-    rag_system.setup(api_key)
-    rag_system.load_directory("data") # Auto-load any PDFs in data/ folder
+    # Check if secrets exist
+    if "GOOGLE_API_KEY" in st.secrets:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        os.environ["GOOGLE_API_KEY"] = api_key 
+        
+        # Initialize RAG
+        rag_system.setup(api_key)
+        
+        # Load Directory (Robust Call)
+        if hasattr(rag_system, 'load_directory'):
+            rag_system.load_directory("data")
+        else:
+            st.error("Error: backend/rag_engine.py is outdated. Please update the file.")
+            
+    else:
+        st.error("🚨 Missing 'GOOGLE_API_KEY' in .streamlit/secrets.toml")
+        st.stop()
 
 except FileNotFoundError:
-    st.error("🚨 Missing Secrets! Please create .streamlit/secrets.toml with your GOOGLE_API_KEY.")
+    st.error("🚨 Missing Secrets File! Create .streamlit/secrets.toml")
     st.stop()
-except KeyError:
-    st.error("🚨 Key Missing! Make sure GOOGLE_API_KEY is defined in secrets.toml.")
+except Exception as e:
+    st.error(f"An unexpected error occurred during setup: {e}")
     st.stop()
 
 # --- 2. Main Interface ---
-# No sidebar clutter. Just the business.
-
 query = st.text_area(
     "Enter Strategic Research Query", 
     "Investigate the feasibility of repurposing Atorvastatin for Alzheimer's disease. Check ongoing trials, patents, and market size.",
@@ -40,33 +49,37 @@ if st.button("🚀 Generate Innovation Strategy"):
         st.write("🧠 **Master Agent:** Analyzing query & generating Master Plan...")
         
         # Invoke Graph
-        inputs = {"user_query": query, "api_key": api_key}
-        result = app.invoke(inputs)
-        
-        # Display The JSON Plan (Requirement)
-        st.write("📋 **Strategic Plan (JSON):**")
-        st.json(result["master_plan"])
-        
-        st.write("⚡ **Executing Worker Agents:**")
-        
-        # Dynamic tabs for agent outputs
-        agent_results = result["agent_outputs"]
-        if agent_results:
-            tabs = st.tabs(list(agent_results.keys()))
-            for i, (agent, output) in enumerate(agent_results.items()):
-                with tabs[i]:
-                    st.markdown(output)
-        
-        status.update(label="Analysis Complete!", state="complete", expanded=False)
+        try:
+            inputs = {"user_query": query, "api_key": api_key}
+            result = app.invoke(inputs)
+            
+            # Display Plan
+            st.write("📋 **Strategic Plan (JSON):**")
+            st.json(result["master_plan"])
+            
+            # Display Agent Outputs
+            st.write("⚡ **Executing Worker Agents:**")
+            agent_results = result["agent_outputs"]
+            
+            if agent_results:
+                tabs = st.tabs(list(agent_results.keys()))
+                for i, (agent, output) in enumerate(agent_results.items()):
+                    with tabs[i]:
+                        st.markdown(output)
+            
+            status.update(label="Analysis Complete!", state="complete", expanded=False)
 
-    # Final Report Display
-    st.divider()
-    st.subheader("📄 Strategic Innovation Report")
-    st.markdown(result["final_report"])
-    
-    # Download
-    st.download_button(
-        "📥 Download Report", 
-        result["final_report"], 
-        file_name="strategy_report.md"
-    )
+            # Final Report
+            st.divider()
+            st.subheader("📄 Strategic Innovation Report")
+            st.markdown(result["final_report"])
+            
+            # Download
+            st.download_button(
+                "📥 Download Report", 
+                result["final_report"], 
+                file_name="strategy_report.md"
+            )
+            
+        except Exception as e:
+            st.error(f"Execution Error: {str(e)}")
