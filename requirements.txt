@@ -1,12 +1,12 @@
 streamlit
-langchain
+langchain>=0.3.0
 langchain-google-genai
-langchain-community
+langchain-community>=0.3.0
 langgraph
 pydantic
 faiss-cpu
 pypdf
-duckduckgo-search
+duckduckgo-search>=6.0.0
 pandas
 python-dotenv
 requests
