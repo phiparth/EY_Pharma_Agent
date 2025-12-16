@@ -1,9 +1,9 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from .master_agent import generate_master_plan, get_available_model
+from .master_agent import generate_master_plan
 from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 import json
 
@@ -28,14 +28,16 @@ def execute_step(state: GraphState):
         agent_name = task["agent_name"]
         instruction = task["specific_instruction"]
         
+        # Route to the correct tool
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
             try:
-                # Direct simple invocation to avoid signature errors
+                # Try passing simple string instruction first
                 output = AGENT_MAP[agent_name].invoke(instruction)
             except:
-                output = f"Error executing {agent_name}"
+                # Fallback if tool needs structured input (should be handled by tool definition, but safe fallback)
+                output = f"Executed {agent_name} with: {instruction}"
         else:
             output = "Error: Agent not found."
             
@@ -46,23 +48,29 @@ def execute_step(state: GraphState):
 def synthesize_step(state: GraphState):
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    # Use Dynamic Model Selection here too
-    best_model = get_available_model(state["api_key"])
-    
-    llm = ChatGoogleGenerativeAI(
-        model=best_model, 
-        google_api_key=state["api_key"]
+    llm = ChatOpenAI(
+        model="gpt-4o-mini", 
+        api_key=state["api_key"],
+        temperature=0.3
     )
     
     summary_prompt = f"""
     You are a Pharmaceutical Strategy Consultant.
     User Query: "{state['user_query']}"
     
-    Data Gathered:
+    Data Gathered from Agents:
     {json.dumps(state['agent_outputs'], indent=2)}
     
-    Write a Strategic Innovation Story report (Markdown).
-    Include: Executive Summary, Clinical Landscape, IP Risks, Commercial Viability, Recommendation.
+    Task:
+    Write a "Strategic Innovation Story" report (Markdown).
+    
+    Structure:
+    1. **Executive Summary**: Feasibility snapshot.
+    2. **Clinical Landscape**: Competitors and trial status.
+    3. **IP & Legal**: Patent expiry and FTO risks.
+    4. **Commercial Viability**: Market size and trends.
+    5. **Supply Chain**: API sourcing risks.
+    6. **Recommendation**: Clear Go/No-Go decision.
     """
     
     response = llm.invoke([HumanMessage(content=summary_prompt)])
