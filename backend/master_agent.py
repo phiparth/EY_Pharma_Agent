@@ -3,41 +3,27 @@ from .models import MasterPlan
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
-def get_fallback_llm(api_key: str):
-    """
-    Tries multiple model names until one works.
-    Fixes the '404 Not Found' error by falling back to older/stable models.
-    """
-    # Priority list of models to try
-    models_to_try = [
-        "gemini-1.5-flash",       # Newest, fast
-        "gemini-1.5-flash-001",   # Specific version
-        "gemini-1.5-pro",         # Powerful
-        "gemini-pro"              # Oldest, most stable fallback
-    ]
-    
-    last_error = None
-    for model_name in models_to_try:
-        try:
-            llm = ChatGoogleGenerativeAI(
-                model=model_name, 
-                google_api_key=api_key,
-                temperature=0
-            )
-            # Test invocation to ensure it actually connects
-            llm.invoke("test")
-            print(f"DEBUG: Successfully connected to {model_name}")
-            return llm
-        except Exception as e:
-            print(f"WARNING: {model_name} failed. Trying next... ({e})")
-            last_error = e
-            continue
-            
-    raise ValueError(f"All Gemini models failed. Please check API Key. Last Error: {last_error}")
-
 def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
-    # Use the fallback logic to get a working LLM
-    llm = get_fallback_llm(api_key)
+    # FORCE 'gemini-1.5-flash' which is the current standard.
+    # If this fails, the key itself has permission issues for this model.
+    try:
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-flash",
+            google_api_key=api_key,
+            temperature=0,
+            # Force v1beta which is often required for Flash 1.5 on standard keys
+            transport="rest" 
+        )
+        # Test connection instantly
+        llm.invoke("Test connection")
+    except Exception as e:
+        print(f"Flash failed ({e}), trying Pro...")
+        # Fallback to Pro if Flash is region-locked
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-1.5-pro", 
+            google_api_key=api_key,
+            temperature=0
+        )
 
     parser = PydanticOutputParser(pydantic_object=MasterPlan)
 
