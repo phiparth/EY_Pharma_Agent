@@ -27,6 +27,7 @@ if st.button("🚀 Run Analysis"):
     with st.status("🤖 Agents Working...", expanded=True):
         try:
             app = build_pharma_graph()
+            # Explicitly passing API key in inputs
             result = app.invoke({"user_query": query, "api_key": api_key})
             
             st.write("📋 **Plan:**")
@@ -38,5 +39,8 @@ if st.button("🚀 Run Analysis"):
             
             st.subheader("📄 Report")
             st.markdown(result["final_report"])
+            
+            st.download_button("Download Report", result["final_report"], file_name="report.md")
         except Exception as e:
             st.error(f"Error: {e}")
+            st.write("Tip: If 404 Model Not Found, check if your API Key supports Gemini 1.5 Flash.")
