@@ -1,29 +1,63 @@
+import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from .models import MasterPlan
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
-def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
-    # FORCE 'gemini-1.5-flash' which is the current standard.
-    # If this fails, the key itself has permission issues for this model.
+def get_available_model(api_key: str):
+    """
+    Asks Google which models are available for this Key and picks the best one.
+    """
+    genai.configure(api_key=api_key)
     try:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=api_key,
-            temperature=0,
-            # Force v1beta which is often required for Flash 1.5 on standard keys
-            transport="rest" 
-        )
-        # Test connection instantly
-        llm.invoke("Test connection")
+        # 1. List all models your key can access
+        all_models = list(genai.list_models())
+        
+        # 2. Filter for text-generation models
+        valid_models = [
+            m.name for m in all_models 
+            if 'generateContent' in m.supported_generation_methods
+        ]
+        
+        print(f"DEBUG: Found available models: {valid_models}")
+
+        # 3. Priority Preference List
+        preferences = [
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-1.5-flash-001",
+            "gemini-pro",
+            "gemini-1.0-pro"
+        ]
+        
+        # 4. Find the best match
+        for pref in preferences:
+            for valid in valid_models:
+                if pref in valid:
+                    # LangChain needs the name without 'models/' prefix
+                    return valid.replace("models/", "")
+        
+        # 5. If no preference match, take the first valid one
+        if valid_models:
+            return valid_models[0].replace("models/", "")
+            
+        # 6. Absolute Fallback (if list fails)
+        return "gemini-pro"
+        
     except Exception as e:
-        print(f"Flash failed ({e}), trying Pro...")
-        # Fallback to Pro if Flash is region-locked
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-pro", 
-            google_api_key=api_key,
-            temperature=0
-        )
+        print(f"WARNING: Could not list models ({e}). Defaulting to gemini-pro.")
+        return "gemini-pro"
+
+def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
+    # Get the model that ACTUALLY exists for this key
+    best_model = get_available_model(api_key)
+    print(f"DEBUG: Selected Model: {best_model}")
+
+    llm = ChatGoogleGenerativeAI(
+        model=best_model, 
+        google_api_key=api_key,
+        temperature=0
+    )
 
     parser = PydanticOutputParser(pydantic_object=MasterPlan)
 
