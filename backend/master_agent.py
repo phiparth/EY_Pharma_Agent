@@ -7,57 +7,65 @@ import streamlit as st
 
 def get_working_model_name(api_key: str):
     """
-    Connects to Google API to find which models are actually available 
-    for this specific API Key.
+    Connects to Google API, lists all available models, and finds the first one 
+    that supports text generation and actually works.
     """
     genai.configure(api_key=api_key)
     try:
-        # List all models available to this key
+        # 1. Get all models
         models = list(genai.list_models())
         
-        # Filter for models that support text generation
-        valid_models = [
+        # 2. Filter for text generation models
+        text_models = [
             m.name for m in models 
             if 'generateContent' in m.supported_generation_methods
         ]
         
-        # Priority list: We prefer 1.5 Flash/Pro, then standard Pro
-        preferences = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro"]
+        # 3. Priority List (Newest first)
+        priority_order = [
+            "models/gemini-1.5-flash",
+            "models/gemini-1.5-pro",
+            "models/gemini-1.5-flash-001",
+            "models/gemini-1.5-pro-001",
+            "models/gemini-1.0-pro",
+            "models/gemini-pro"
+        ]
         
-        # 1. Check if any preferred alias exists exactly in the valid list
-        for pref in preferences:
-            # The API returns names like 'models/gemini-pro', so we check for ends_with
-            match = next((m for m in valid_models if m.endswith(pref)), None)
-            if match:
-                # Remove 'models/' prefix if LangChain adds it automatically, 
-                # but usually passing the full name 'models/gemini-...' is safer now.
-                return match.replace("models/", "")
+        selected_model = None
+        
+        # Try finding a match in our priority list
+        for priority in priority_order:
+            if priority in text_models:
+                selected_model = priority
+                break
+        
+        # If no priority match, take the first valid one we found
+        if not selected_model and text_models:
+            selected_model = text_models[0]
+            
+        if not selected_model:
+            # Fallback hard if list is empty (rare)
+            selected_model = "gemini-1.5-flash"
 
-        # 2. If no preferred match, just take the first valid Gemini model
-        gemini_fallback = next((m for m in valid_models if "gemini" in m), None)
-        if gemini_fallback:
-            return gemini_fallback.replace("models/", "")
-
-        return "gemini-pro" # Absolute fallback
+        print(f"DEBUG: Auto-Selected Model: {selected_model}")
+        return selected_model.replace("models/", "") # LangChain usually prefers just the name
 
     except Exception as e:
         print(f"Error listing models: {e}")
-        return "gemini-pro" # Blind fallback
+        # Absolute backup
+        return "gemini-1.5-flash" 
 
 def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
     
     # DYNAMICALLY FIND THE CORRECT MODEL
     best_model = get_working_model_name(api_key)
-    print(f"DEBUG: Selected Model: {best_model}")
-
-    try:
-        llm = ChatGoogleGenerativeAI(
-            model=best_model, 
-            google_api_key=api_key,
-            temperature=0
-        )
-    except Exception as e:
-        raise ValueError(f"Failed to initialize model {best_model}: {e}")
+    
+    # Configure LLM with the found model
+    llm = ChatGoogleGenerativeAI(
+        model=best_model, 
+        google_api_key=api_key,
+        temperature=0
+    )
 
     parser = PydanticOutputParser(pydantic_object=MasterPlan)
 
