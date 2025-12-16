@@ -28,9 +28,11 @@ def execute_step(state: GraphState):
         agent_name = task["agent_name"]
         instruction = task["specific_instruction"]
         
+        # Execute tool
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
+            # Inject context variables if tool expects them
             if agent_name == "ClinicalTrialsAgent":
                 output = AGENT_MAP[agent_name].invoke({
                     "instruction": instruction,
