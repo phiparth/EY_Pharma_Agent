@@ -1,9 +1,8 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from .master_agent import generate_master_plan, get_working_model_name
+from .master_agent import generate_master_plan, get_fallback_llm
 from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 import json
 
@@ -28,34 +27,29 @@ def execute_step(state: GraphState):
         agent_name = task["agent_name"]
         instruction = task["specific_instruction"]
         
-        # Execute tool
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
-            # Inject context variables if tool expects them
+            # Inject context
+            context = {}
             if agent_name == "ClinicalTrialsAgent":
-                output = AGENT_MAP[agent_name].invoke({
-                    "instruction": instruction,
-                    "molecule": plan["molecule"], 
-                    "indication": plan["indication"]
-                })
-            elif agent_name == "PatentLandscapeAgent":
-                 output = AGENT_MAP[agent_name].invoke({
-                    "instruction": instruction,
-                    "molecule": plan["molecule"]
-                })
+                context = {"molecule": plan["molecule"], "indication": plan["indication"]}
+            elif agent_name in ["PatentLandscapeAgent", "EXIMTrendsAgent"]:
+                context = {"molecule": plan["molecule"]}
             elif agent_name == "IQVIAInsightsAgent":
-                 output = AGENT_MAP[agent_name].invoke({
-                    "instruction": instruction,
-                    "therapeutic_area": plan["therapeutic_area"]
-                })
-            elif agent_name == "EXIMTrendsAgent":
-                 output = AGENT_MAP[agent_name].invoke({
-                    "instruction": instruction,
-                    "molecule": plan["molecule"]
-                })
-            else:
-                output = AGENT_MAP[agent_name].invoke(instruction)
+                context = {"therapeutic_area": plan["therapeutic_area"]}
+            
+            # Combine instruction with context if needed, or pass as dict
+            # For simplicity in this robust version, we try passing dict if tool supports it, else string
+            try:
+                if context:
+                    # Merge instruction into context
+                    context["instruction"] = instruction
+                    output = AGENT_MAP[agent_name].invoke(context)
+                else:
+                    output = AGENT_MAP[agent_name].invoke(instruction)
+            except Exception as e:
+                output = f"Tool Error: {str(e)}"
         else:
             output = "Error: Agent not found."
             
@@ -66,10 +60,8 @@ def execute_step(state: GraphState):
 def synthesize_step(state: GraphState):
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    # DYNAMICALLY FIND MODEL
-    best_model = get_working_model_name(state["api_key"])
-    
-    llm = ChatGoogleGenerativeAI(model=best_model, google_api_key=state["api_key"])
+    # Use the same fallback logic
+    llm = get_fallback_llm(state["api_key"])
     
     summary_prompt = f"""
     You are a Pharmaceutical Strategy Consultant.
