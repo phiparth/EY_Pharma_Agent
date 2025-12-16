@@ -1,4 +1,5 @@
 import os
+import glob
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -6,41 +7,54 @@ from langchain_community.vectorstores import FAISS
 class RAGSystem:
     def __init__(self):
         self.vector_store = None
-        self.embeddings = None  # Don't initialize yet!
+        self.embeddings = None
 
     def setup(self, api_key: str):
-        """Initializes the embedding model with the provided API key."""
+        """Initializes the embedding model with the secret key."""
         if not api_key:
-            raise ValueError("API Key is required to initialize RAG.")
+            print("Error: No API Key found in secrets.")
+            return
         
-        # Initialize now that we have the key
         self.embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001",
             google_api_key=api_key
         )
 
-    def ingest(self, file_path: str):
-        """Loads PDF and creates vector index."""
+    def load_directory(self, directory_path: str = "data"):
+        """Automatically scans and ingests all PDFs in the data folder."""
         if not self.embeddings:
-            return "Error: RAG System not initialized. Please provide API Key first."
+            return # Wait for setup
 
-        loader = PyPDFLoader(file_path)
-        pages = loader.load_and_split()
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+            return # Nothing to load yet
+
+        pdf_files = glob.glob(os.path.join(directory_path, "*.pdf"))
+        if not pdf_files:
+            return
+
+        all_pages = []
+        print(f"DEBUG: Found {len(pdf_files)} internal documents. Indexing...")
         
-        # Create vector store using the initialized embeddings
-        self.vector_store = FAISS.from_documents(pages, self.embeddings)
-        return True
+        for file_path in pdf_files:
+            try:
+                loader = PyPDFLoader(file_path)
+                all_pages.extend(loader.load_and_split())
+            except Exception as e:
+                print(f"Error loading {file_path}: {e}")
+
+        if all_pages:
+            self.vector_store = FAISS.from_documents(all_pages, self.embeddings)
+            print("DEBUG: Internal Knowledge Base Built.")
 
     def query(self, query_text: str):
-        if not self.embeddings:
-            return "RAG System not initialized."
-        
         if not self.vector_store:
-            return "No internal documents uploaded."
+            return "No internal strategy documents found in 'data/' folder."
         
-        # Perform similarity search
-        docs = self.vector_store.similarity_search(query_text, k=3)
-        return "\n".join([d.page_content for d in docs])
+        try:
+            docs = self.vector_store.similarity_search(query_text, k=3)
+            return "\n".join([d.page_content for d in docs])
+        except Exception:
+            return "Error querying internal knowledge base."
 
-# Create the instance, but it's "empty" until setup() is called in app.py
 rag_system = RAGSystem()
