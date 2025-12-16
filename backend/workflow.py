@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from .master_agent import generate_master_plan
+from .master_agent import generate_master_plan, get_available_model
 from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -31,30 +31,11 @@ def execute_step(state: GraphState):
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
-            # Simple direct invocation for robustness
             try:
-                # If tool expects specific args, we try to pass them, otherwise standard instruction
-                if agent_name == "ClinicalTrialsAgent":
-                    output = AGENT_MAP[agent_name].invoke({
-                        "instruction": instruction,
-                        "molecule": plan["molecule"], 
-                        "indication": plan["indication"]
-                    })
-                elif agent_name in ["PatentLandscapeAgent", "EXIMTrendsAgent"]:
-                    output = AGENT_MAP[agent_name].invoke({
-                        "instruction": instruction,
-                        "molecule": plan["molecule"]
-                    })
-                elif agent_name == "IQVIAInsightsAgent":
-                    output = AGENT_MAP[agent_name].invoke({
-                        "instruction": instruction,
-                        "therapeutic_area": plan["therapeutic_area"]
-                    })
-                else:
-                    output = AGENT_MAP[agent_name].invoke(instruction)
-            except:
-                # Fallback to simple instruction passing if structured args fail
+                # Direct simple invocation to avoid signature errors
                 output = AGENT_MAP[agent_name].invoke(instruction)
+            except:
+                output = f"Error executing {agent_name}"
         else:
             output = "Error: Agent not found."
             
@@ -65,9 +46,11 @@ def execute_step(state: GraphState):
 def synthesize_step(state: GraphState):
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    # Use standard Flash model
+    # Use Dynamic Model Selection here too
+    best_model = get_available_model(state["api_key"])
+    
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", 
+        model=best_model, 
         google_api_key=state["api_key"]
     )
     
