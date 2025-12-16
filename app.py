@@ -6,68 +6,67 @@ from backend.rag_engine import rag_system
 # Page Config
 st.set_page_config(page_title="EY Techathon: Pharma Agent", layout="wide")
 st.title("🧬 Pharma Agentic AI: Innovation Engine")
-st.caption("Powered by Gemini 1.5, LangGraph, and Real-Time APIs")
 
-# Sidebar
-# ... (imports remain the same)
-
-# Sidebar
-st.sidebar.header("Setup")
-api_key = st.sidebar.text_input("Gemini API Key", type="password")
-
-# --- FIX: Initialize RAG with Key ---
-if api_key:
-    rag_system.setup(api_key)  # <--- THIS LINE IS CRITICAL
-
-uploaded_file = st.sidebar.file_uploader("Upload Internal Strategy PDF", type=["pdf"])
-if uploaded_file and api_key: # Ensure key exists before processing
-    # Save and Ingest
-    if not os.path.exists("data"): os.makedirs("data")
-    path = os.path.join("data", uploaded_file.name)
-    with open(path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+# --- 1. Load Secrets & Setup RAG ---
+try:
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    os.environ["GOOGLE_API_KEY"] = api_key # Set env var for generic tools if needed
     
-    with st.spinner("Ingesting Knowledge Base..."):
-        rag_system.ingest(path)
-    st.sidebar.success("PDF Indexed!")
-# ... (rest of the app)
+    # Initialize RAG silently on startup
+    rag_system.setup(api_key)
+    rag_system.load_directory("data") # Auto-load any PDFs in data/ folder
 
-# Main Chat
-query = st.text_area("Enter Strategic Query", 
-                     "Can we repurpose Metformin for Anti-Aging indications? Check clinical trials, patent landscape, and market viability.")
+except FileNotFoundError:
+    st.error("🚨 Missing Secrets! Please create .streamlit/secrets.toml with your GOOGLE_API_KEY.")
+    st.stop()
+except KeyError:
+    st.error("🚨 Key Missing! Make sure GOOGLE_API_KEY is defined in secrets.toml.")
+    st.stop()
 
-if st.button("Generate Strategy") and api_key:
-    os.environ["GOOGLE_API_KEY"] = api_key
+# --- 2. Main Interface ---
+# No sidebar clutter. Just the business.
+
+query = st.text_area(
+    "Enter Strategic Research Query", 
+    "Investigate the feasibility of repurposing Atorvastatin for Alzheimer's disease. Check ongoing trials, patents, and market size.",
+    height=100
+)
+
+if st.button("🚀 Generate Innovation Strategy"):
     
     app = build_pharma_graph()
     
-    # Run Graph
-    with st.status("Orchestrating Agents...", expanded=True) as status:
-        st.write("🧠 Master Agent: Analyzing query & generating JSON Plan...")
+    with st.status("🤖 Orchestrating AI Agents...", expanded=True) as status:
+        st.write("🧠 **Master Agent:** Analyzing query & generating Master Plan...")
         
-        # We invoke the graph
+        # Invoke Graph
         inputs = {"user_query": query, "api_key": api_key}
         result = app.invoke(inputs)
         
-        # Display Plan
-        st.write("📋 **Master Plan Generated:**")
+        # Display The JSON Plan (Requirement)
+        st.write("📋 **Strategic Plan (JSON):**")
         st.json(result["master_plan"])
         
-        # Display Agent Outputs
-        st.write("🚜 **Agent Execution Results:**")
-        for agent, output in result["agent_outputs"].items():
-            with st.expander(f"Agent: {agent}"):
-                st.write(output)
+        st.write("⚡ **Executing Worker Agents:**")
         
-        status.update(label="Process Complete!", state="complete", expanded=False)
+        # Dynamic tabs for agent outputs
+        agent_results = result["agent_outputs"]
+        if agent_results:
+            tabs = st.tabs(list(agent_results.keys()))
+            for i, (agent, output) in enumerate(agent_results.items()):
+                with tabs[i]:
+                    st.markdown(output)
+        
+        status.update(label="Analysis Complete!", state="complete", expanded=False)
 
-    # Final Report
-    st.markdown("---")
-    st.header("📄 Strategic Innovation Report")
+    # Final Report Display
+    st.divider()
+    st.subheader("📄 Strategic Innovation Report")
     st.markdown(result["final_report"])
     
-    # Download Button
-    st.download_button("Download Report", result["final_report"], file_name="strategy_report.md")
-
-elif not api_key:
-    st.warning("Please enter your Gemini API Key to proceed.")
+    # Download
+    st.download_button(
+        "📥 Download Report", 
+        result["final_report"], 
+        file_name="strategy_report.md"
+    )
