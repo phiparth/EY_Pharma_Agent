@@ -4,15 +4,15 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
 def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
+    # FIX: Use the specific versioned model name
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", 
+        model="gemini-1.5-flash-001", 
         google_api_key=api_key,
         temperature=0
     )
 
     parser = PydanticOutputParser(pydantic_object=MasterPlan)
 
-    # The EXACT prompt required by the user context
     system_prompt = """
     You are the *Master Orchestrator Agent* for a pharmaceutical innovation engine. 
     Your task is to analyze a strategic research query and break it down into a structured JSON plan for your specialized Worker Agents.
