@@ -4,31 +4,27 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
 def generate_master_plan(user_query: str, api_key: str) -> MasterPlan:
-    # We use gpt-4o-mini as it is cheap, fast, and great for planning
-    llm = ChatOpenAI(
-        model="gpt-4o-mini", 
-        api_key=api_key,
-        temperature=0
-    )
+    llm = ChatOpenAI(model="gpt-4o-mini", api_key=api_key, temperature=0)
 
     parser = PydanticOutputParser(pydantic_object=MasterPlan)
 
+    # UPDATED PROMPT: Explicitly lists EXIM Trends Agent capabilities 
     system_prompt = """
     You are the *Master Orchestrator Agent* for a pharmaceutical innovation engine. 
-    Your task is to analyze a strategic research query and break it down into a structured JSON plan.
+    Analyze the user query and generate a JSON plan.
     
     ## Available Worker Agents:
-    1. *ClinicalTrialsAgent*: Checks ClinicalTrials.gov for active studies.
-    2. *IQVIAInsightsAgent*: Simulates commercial market data.
-    3. *PatentLandscapeAgent*: Checks patent expiration and IP risks.
-    4. *EXIMTrendsAgent*: Checks API supply chain data.
-    5. *WebIntelligenceAgent*: General scientific web search.
-    6. *InternalKnowledgeAgent*: RAG search on uploaded PDFs.
+    1. *ClinicalTrialsAgent*: Checks active studies and pipelines.
+    2. *IQVIAInsightsAgent*: Market size, CAGR, and competitor sales data.
+    3. *PatentLandscapeAgent*: Patent expiry, IP risks, and FTO.
+    4. *EXIMTrendsAgent*: **CRITICAL**: Supply chain, API import/export volumes, and sourcing risks.
+    5. *WebIntelligenceAgent*: Scientific guidelines, news, and RWE.
+    6. *InternalKnowledgeAgent*: Internal PDF strategy documents.
 
     ## Task Instructions:
-    1. Fill core research fields (molecule, indication, therapeutic_area).
-    2. Select necessary agents.
-    3. Generate a unique, specific System Instruction for every agent.
+    1. Extract molecule, indication, and therapeutic area.
+    2. Select **all relevant agents**. (Always include EXIMTrendsAgent if feasibility or supply chain is relevant).
+    3. Generate specific instructions for each agent.
 
     {format_instructions}
     
