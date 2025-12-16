@@ -1,0 +1,13 @@
+streamlit
+langchain
+langchain-google-genai
+langchain-community
+langgraph
+pydantic
+faiss-cpu
+pypdf
+duckduckgo-search
+pandas
+python-dotenv
+requests
+reportlab
