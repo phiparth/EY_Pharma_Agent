@@ -9,11 +9,18 @@ st.title("🧬 Pharma Agentic AI: Innovation Engine")
 st.caption("Powered by Gemini 1.5, LangGraph, and Real-Time APIs")
 
 # Sidebar
+# ... (imports remain the same)
+
+# Sidebar
 st.sidebar.header("Setup")
 api_key = st.sidebar.text_input("Gemini API Key", type="password")
 
+# --- FIX: Initialize RAG with Key ---
+if api_key:
+    rag_system.setup(api_key)  # <--- THIS LINE IS CRITICAL
+
 uploaded_file = st.sidebar.file_uploader("Upload Internal Strategy PDF", type=["pdf"])
-if uploaded_file:
+if uploaded_file and api_key: # Ensure key exists before processing
     # Save and Ingest
     if not os.path.exists("data"): os.makedirs("data")
     path = os.path.join("data", uploaded_file.name)
@@ -23,6 +30,7 @@ if uploaded_file:
     with st.spinner("Ingesting Knowledge Base..."):
         rag_system.ingest(path)
     st.sidebar.success("PDF Indexed!")
+# ... (rest of the app)
 
 # Main Chat
 query = st.text_area("Enter Strategic Query", 
