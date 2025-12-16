@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from .master_agent import generate_master_plan
+from .master_agent import generate_master_plan, get_working_model_name
 from .worker_agents import AGENT_MAP
 from .rag_engine import rag_system
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -31,7 +31,6 @@ def execute_step(state: GraphState):
         if agent_name == "InternalKnowledgeAgent":
             output = rag_system.query(instruction)
         elif agent_name in AGENT_MAP:
-            # Context injection for specific tools
             if agent_name == "ClinicalTrialsAgent":
                 output = AGENT_MAP[agent_name].invoke({
                     "instruction": instruction,
@@ -65,19 +64,10 @@ def execute_step(state: GraphState):
 def synthesize_step(state: GraphState):
     print("--- ORCHESTRATOR: Synthesizing Report ---")
     
-    # Fallback Logic for Synthesis as well
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
-    llm = None
-    for model in models_to_try:
-        try:
-            llm = ChatGoogleGenerativeAI(model=model, google_api_key=state["api_key"])
-            llm.invoke("test")
-            break
-        except:
-            continue
-            
-    if not llm:
-        return {"final_report": "Error: Could not connect to any Gemini model for reporting."}
+    # DYNAMICALLY FIND MODEL
+    best_model = get_working_model_name(state["api_key"])
+    
+    llm = ChatGoogleGenerativeAI(model=best_model, google_api_key=state["api_key"])
     
     summary_prompt = f"""
     You are a Pharmaceutical Strategy Consultant.
